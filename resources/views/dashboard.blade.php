@@ -207,124 +207,117 @@
 
 @section('scripts')
 <script>
-    // Mockup Data Negara
-    const countriesData = {
-        id: {
-            name: "Indonesia",
-            gdp: "$1.37 Triliun",
-            gdpGrowth: "+5.05% (Pertumbuhan Tahunan)",
-            inflation: "2.8%",
-            inflationStatus: "<i class='fa-solid fa-circle-check text-success me-1'></i>Dalam batas aman",
-            population: "275.5 Juta",
-            currency: "IDR (Rupiah)",
-            exchangeRate: "1 USD = Rp 16,300.00",
-            weather: { temp: "31°C", rain: "1.2 mm", wind: "8 km/h", storm: "Rendah (2%)", stormColor: "text-success" },
-            risk: {
-                score: 25,
-                badge: "Low Risk",
-                badgeClass: "risk-low",
-                progressColor: "#10b981",
-                weather: 5,
-                inflation: 25,
-                currency: 10,
-                news: 60
-            }
-        },
-        de: {
-            name: "Jerman",
-            gdp: "$4.20 Triliun",
-            gdpGrowth: "+1.2% (Pertumbuhan Lambat)",
-            inflation: "2.1%",
-            inflationStatus: "<i class='fa-solid fa-circle-check text-success me-1'></i>Sangat stabil",
-            population: "83.2 Juta",
-            currency: "EUR (Euro)",
-            exchangeRate: "1 USD = 0.92 EUR (1 EUR = Rp 17,200)",
-            weather: { temp: "18°C", rain: "0.2 mm", wind: "12 km/h", storm: "Sangat Rendah (5%)", stormColor: "text-success" },
-            risk: {
-                score: 22,
-                badge: "Low Risk",
-                badgeClass: "risk-low",
-                progressColor: "#10b981",
-                weather: 10,
-                inflation: 20,
-                currency: 10,
-                news: 40
-            }
-        },
-        cn: {
-            name: "China",
-            gdp: "$17.7 Triliun",
-            gdpGrowth: "+4.8% (Pertumbuhan Kuat)",
-            inflation: "0.5%",
-            inflationStatus: "<i class='fa-solid fa-triangle-exclamation text-info me-1'></i>Deflasi Khawatir",
-            population: "1.41 Milyar",
-            currency: "CNY (Yuan)",
-            exchangeRate: "1 USD = 7.24 CNY (1 CNY = Rp 2,250)",
-            weather: { temp: "28°C", rain: "14.5 mm", wind: "24 km/h", storm: "Sedang (45%)", stormColor: "text-warning" },
-            risk: {
-                score: 47,
-                badge: "Medium Risk",
-                badgeClass: "risk-medium",
-                progressColor: "#f59e0b",
-                weather: 50,
-                inflation: 10,
-                currency: 20,
-                news: 50
-            }
-        },
-        au: {
-            name: "Australia",
-            gdp: "$1.62 Triliun",
-            gdpGrowth: "+1.9% (Normal)",
-            inflation: "3.6%",
-            inflationStatus: "<i class='fa-solid fa-triangle-exclamation text-warning me-1'></i>Mulai Tinggi",
-            population: "26.2 Juta",
-            currency: "AUD (Dollar Aus)",
-            exchangeRate: "1 USD = 1.51 AUD (1 AUD = Rp 10,800)",
-            weather: { temp: "14°C", rain: "45.0 mm", wind: "45 km/h", storm: "Tinggi (80%)", stormColor: "text-danger" },
-            risk: {
-                score: 68,
-                badge: "High Risk",
-                badgeClass: "risk-high",
-                progressColor: "#ef4444",
-                weather: 85,
-                inflation: 35,
-                currency: 30,
-                news: 70
-            }
-        }
-    };
-
     const selector = document.getElementById('country-selector');
+    let loadedCountries = [];
+    let currentCountryId = null;
+
+    // Helper functions for formatting
+    function formatGDP(value) {
+        if (!value) return "N/A";
+        if (value >= 1e12) {
+            return "$" + (value / 1e12).toFixed(2) + " Triliun";
+        } else if (value >= 1e9) {
+            return "$" + (value / 1e9).toFixed(2) + " Milyar";
+        }
+        return "$" + value.toLocaleString('id-ID');
+    }
+
+    function formatPopulation(value) {
+        if (!value) return "N/A";
+        if (value >= 1e9) {
+            return (value / 1e9).toFixed(2) + " Milyar";
+        } else if (value >= 1e6) {
+            return (value / 1e6).toFixed(2) + " Juta";
+        }
+        return value.toLocaleString('id-ID');
+    }
+
+    // Load countries list
+    async function loadCountries() {
+        try {
+            const response = await fetch('/api/countries');
+            loadedCountries = await response.json();
+            
+            // Populate selector
+            selector.innerHTML = '';
+            loadedCountries.forEach(country => {
+                const option = document.createElement('option');
+                option.value = country.iso2;
+                option.textContent = `${country.iso2.toUpperCase()} - ${country.name}`;
+                if (country.iso2 === 'id') {
+                    option.selected = true;
+                }
+                selector.appendChild(option);
+            });
+
+            // Load initial dashboard
+            updateDashboard('id');
+        } catch (error) {
+            console.error('Failed to load countries list:', error);
+        }
+    }
 
     // Update UI elements based on selected country
-    function updateDashboard(countryCode) {
-        const data = countriesData[countryCode];
-        if (!data) return;
+    async function updateDashboard(countryCode) {
+        try {
+            // Apply fading effect / loading state
+            const container = document.querySelector('.fade-in-up');
+            container.style.opacity = 0.5;
 
-        // Apply fading effect
-        const container = document.querySelector('.fade-in-up');
-        container.style.opacity = 0;
-        container.style.transform = 'translateY(10px)';
-        container.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+            const response = await fetch(`/api/countries/${countryCode}`);
+            const data = await response.json();
+            
+            if (response.status !== 200) {
+                alert(data.message || 'Gagal memuat data negara');
+                return;
+            }
 
-        setTimeout(() => {
-            document.getElementById('val-gdp').textContent = data.gdp;
-            document.getElementById('val-gdp-growth').innerHTML = `<i class="fa-solid fa-arrow-trend-up me-1"></i>${data.gdpGrowth}`;
-            document.getElementById('val-inflation').textContent = data.inflation;
-            document.getElementById('val-inflation-status').innerHTML = data.inflationStatus;
-            document.getElementById('val-population').textContent = data.population;
-            document.getElementById('val-currency').textContent = data.currency;
-            document.getElementById('val-exchange-rate').textContent = data.exchangeRate;
+            currentCountryId = data.country.id;
+
+            // Apply dashboard values
+            document.getElementById('val-gdp').textContent = formatGDP(data.country.gdp);
+            
+            const gdpGrowth = data.country.gdp_growth;
+            const growthSign = gdpGrowth >= 0 ? '+' : '';
+            const growthColorClass = gdpGrowth >= 0 ? 'text-success' : 'text-danger';
+            const growthIcon = gdpGrowth >= 0 ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down';
+            document.getElementById('val-gdp-growth').className = `${growthColorClass} fs-7`;
+            document.getElementById('val-gdp-growth').innerHTML = `<i class="fa-solid ${growthIcon} me-1"></i>${growthSign}${gdpGrowth}% (Pertumbuhan Tahunan)`;
+
+            document.getElementById('val-inflation').textContent = `${data.country.inflation}%`;
+            
+            const inflationStatusEl = document.getElementById('val-inflation-status');
+            if (data.country.inflation <= 3.0 && data.country.inflation >= 0) {
+                inflationStatusEl.innerHTML = `<i class="fa-solid fa-circle-check text-success me-1"></i>Dalam batas aman`;
+            } else if (data.country.inflation < 0) {
+                inflationStatusEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-info me-1"></i>Deflasi Terjadi`;
+            } else {
+                inflationStatusEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-warning me-1"></i>Mulai Tinggi`;
+            }
+
+            document.getElementById('val-population').textContent = formatPopulation(data.country.population);
+            document.getElementById('val-currency').textContent = `${data.currency.code} (${data.currency.name})`;
+            
+            const rateStr = data.currency.rate_to_usd 
+                ? `1 USD = ${parseFloat(data.currency.rate_to_usd).toLocaleString('id-ID')} ${data.currency.code}` 
+                : '1 USD = N/A';
+            document.getElementById('val-exchange-rate').textContent = rateStr;
 
             // Weather
-            document.getElementById('weather-temp').textContent = data.weather.temp;
-            document.getElementById('weather-rain').textContent = data.weather.rain;
-            document.getElementById('weather-wind').textContent = data.weather.wind;
+            document.getElementById('weather-temp').textContent = `${data.weather.temp}°C`;
+            document.getElementById('weather-rain').textContent = `${data.weather.rain} mm`;
+            document.getElementById('weather-wind').textContent = `${data.weather.wind} km/h`;
             
             const stormEl = document.getElementById('weather-storm');
-            stormEl.textContent = data.weather.storm;
-            stormEl.className = `fw-bold mb-0 ${data.weather.stormColor}`;
+            const stormRisk = data.weather.storm_risk;
+            stormEl.textContent = `${stormRisk}%`;
+            if (stormRisk > 50) {
+                stormEl.className = 'fw-bold mb-0 text-danger';
+            } else if (stormRisk > 20) {
+                stormEl.className = 'fw-bold mb-0 text-warning';
+            } else {
+                stormEl.className = 'fw-bold mb-0 text-success';
+            }
 
             // Risk Engine
             document.getElementById('risk-score').textContent = data.risk.score;
@@ -342,22 +335,24 @@
             circle.style.stroke = data.risk.progressColor;
 
             // Bars
-            document.getElementById('risk-weather-val').textContent = `${data.risk.weather}%`;
-            document.getElementById('risk-weather-bar').style.width = `${data.risk.weather}%`;
+            document.getElementById('risk-weather-val').textContent = `${data.risk.breakdown.weather}%`;
+            document.getElementById('risk-weather-bar').style.width = `${data.risk.breakdown.weather}%`;
 
-            document.getElementById('risk-inflation-val').textContent = `${data.risk.inflation}%`;
-            document.getElementById('risk-inflation-bar').style.width = `${data.risk.inflation}%`;
+            document.getElementById('risk-inflation-val').textContent = `${data.risk.breakdown.inflation}%`;
+            document.getElementById('risk-inflation-bar').style.width = `${data.risk.breakdown.inflation}%`;
 
-            document.getElementById('risk-currency-val').textContent = `${data.risk.currency}%`;
-            document.getElementById('risk-currency-bar').style.width = `${data.risk.currency}%`;
+            document.getElementById('risk-currency-val').textContent = `${data.risk.breakdown.currency}%`;
+            document.getElementById('risk-currency-bar').style.width = `${data.risk.breakdown.currency}%`;
 
-            document.getElementById('risk-news-val').textContent = `${data.risk.news}%`;
-            document.getElementById('risk-news-bar').style.width = `${data.risk.news}%`;
+            document.getElementById('risk-news-val').textContent = `${data.risk.breakdown.news}%`;
+            document.getElementById('risk-news-bar').style.width = `${data.risk.breakdown.news}%`;
 
             // Restore Opacity
             container.style.opacity = 1;
             container.style.transform = 'translateY(0)';
-        }, 250);
+        } catch (error) {
+            console.error('Failed to update dashboard:', error);
+        }
     }
 
     selector.addEventListener('change', (e) => {
@@ -366,13 +361,33 @@
 
     // Trigger initial progress circle load
     document.addEventListener('DOMContentLoaded', () => {
-        updateDashboard('id');
+        loadCountries();
     });
 
     // Button watchlist action
-    document.getElementById('btn-save-watchlist').addEventListener('click', function() {
-        const countryName = countriesData[selector.value].name;
-        alert(`${countryName} berhasil ditambahkan ke daftar pantauan favorit Anda!`);
+    document.getElementById('btn-save-watchlist').addEventListener('click', async function() {
+        if (!currentCountryId) return;
+        
+        try {
+            const response = await fetch('/api/watchlist', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({ country_id: currentCountryId })
+            });
+
+            const result = await response.json();
+            if (response.ok) {
+                alert(result.message);
+            } else {
+                alert(result.message || 'Gagal menambahkan ke daftar pantauan');
+            }
+        } catch (error) {
+            console.error('Watchlist save failed:', error);
+            alert('Terjadi kesalahan saat menyimpan ke watchlist');
+        }
     });
 </script>
 @endsection

@@ -236,5 +236,119 @@
             e.target.classList.add('text-white');
         });
     });
+
+    // Load admin panel data
+    async function loadAdminData() {
+        try {
+            const response = await fetch('/api/admin/dashboard');
+            const data = await response.json();
+
+            // 1. Update quick stats counts
+            document.querySelector('.row.g-3.mb-4 > div:nth-child(1) h3').textContent = data.users.length;
+            document.querySelector('.row.g-3.mb-4 > div:nth-child(2) h3').textContent = data.ports_count;
+            document.querySelector('.row.g-3.mb-4 > div:nth-child(3) h3').textContent = data.articles.length;
+
+            // 2. Render Users Table
+            const usersTbody = document.querySelector('#users table tbody');
+            usersTbody.innerHTML = '';
+            data.users.forEach(user => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="text-white fw-semibold">${user.name}</td>
+                    <td>${user.email}</td>
+                    <td><span class="badge bg-primary bg-opacity-25 text-primary border border-primary border-opacity-30">${user.email === 'admin@riskintel.local' ? 'Admin' : 'Pengguna'}</span></td>
+                    <td><span class="badge bg-success text-success-light">Aktif</span></td>
+                    <td class="text-end">
+                        <button class="btn btn-outline-secondary btn-sm border-0 fs-8"><i class="fa-regular fa-edit text-white"></i></button>
+                    </td>
+                `;
+                usersTbody.appendChild(tr);
+            });
+
+            // 3. Render Ports Table (Fetch first 15 ports from database to display)
+            const portsResponse = await fetch('/api/ports?country_code=id');
+            const ports = await portsResponse.json();
+            const portsTbody = document.querySelector('#ports table tbody');
+            portsTbody.innerHTML = '';
+            ports.forEach(port => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="text-white fw-semibold">${port.name}</td>
+                    <td>${port.country.name}</td>
+                    <td><code>${parseFloat(port.latitude).toFixed(4)}, ${parseFloat(port.longitude).toFixed(4)}</code></td>
+                    <td><span class="badge bg-success bg-opacity-25 text-success border border-success border-opacity-30">Normal</span></td>
+                    <td class="text-end">
+                        <button class="btn btn-outline-danger btn-sm border-0 fs-8" onclick="deletePort(${port.id})"><i class="fa-regular fa-trash-can"></i></button>
+                    </td>
+                `;
+                portsTbody.appendChild(tr);
+            });
+
+            // 4. Render Articles Table
+            const articlesTbody = document.querySelector('#articles table tbody');
+            articlesTbody.innerHTML = '';
+            if (data.articles.length === 0) {
+                articlesTbody.innerHTML = `<tr><td colspan="5" class="text-center text-secondary py-3 fs-7">Belum ada artikel analisis.</td></tr>`;
+            } else {
+                data.articles.forEach(art => {
+                    const tr = document.createElement('tr');
+                    const pubDate = new Date(art.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+                    tr.innerHTML = `
+                        <td class="text-white fw-semibold text-truncate" style="max-width: 250px;">${art.title}</td>
+                        <td>${art.category}</td>
+                        <td>${art.author ? art.author.name : 'Unknown'}</td>
+                        <td>${pubDate}</td>
+                        <td class="text-end">
+                            <button class="btn btn-outline-danger btn-sm border-0 fs-8" onclick="deleteArticle(${art.id})"><i class="fa-regular fa-trash-can"></i></button>
+                        </td>
+                    `;
+                    articlesTbody.appendChild(tr);
+                });
+            }
+
+        } catch (error) {
+            console.error('Failed to load admin dashboard data:', error);
+        }
+    }
+
+    // Delete Port Action
+    async function deletePort(id) {
+        if (!confirm('Apakah Anda yakin ingin menghapus pelabuhan ini?')) return;
+        try {
+            const response = await fetch(`/api/admin/ports/${id}`, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                }
+            });
+            if (response.ok) {
+                loadAdminData();
+            }
+        } catch (error) {
+            console.error('Failed to delete port:', error);
+        }
+    }
+
+    // Delete Article Action
+    async function deleteArticle(id) {
+        if (!confirm('Apakah Anda yakin ingin menghapus artikel ini?')) return;
+        try {
+            const response = await fetch(`/api/admin/articles/${id}`, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                }
+            });
+            if (response.ok) {
+                loadAdminData();
+            }
+        } catch (error) {
+            console.error('Failed to delete article:', error);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadAdminData();
+    });
 </script>
 @endsection

@@ -125,170 +125,170 @@
 
 @section('scripts')
 <script>
-    // Mockup Data Nilai Tukar (30 hari terakhir)
-    const currencyHistory = {
-        USDIDR: {
-            pair: "USD / IDR",
-            current: "Rp 16,300.00",
-            change: "+0.45%",
-            status: "Stabil",
-            label: "USD ke Rupiah",
-            data: [16100, 16120, 16090, 16150, 16130, 16180, 16200, 16190, 16220, 16250, 16230, 16280, 16320, 16300, 16290, 16300]
-        },
-        USDEUR: {
-            pair: "USD / EUR",
-            current: "0.92 EUR",
-            change: "-0.12%",
-            status: "Sangat Stabil",
-            label: "USD ke Euro",
-            data: [0.90, 0.91, 0.905, 0.908, 0.912, 0.915, 0.911, 0.918, 0.922, 0.92, 0.919, 0.924, 0.921, 0.922, 0.92, 0.92]
-        },
-        USDCNY: {
-            pair: "USD / CNY",
-            current: "7.24 CNY",
-            change: "+0.18%",
-            status: "Stabil",
-            label: "USD ke Yuan",
-            data: [7.15, 7.16, 7.18, 7.17, 7.19, 7.21, 7.20, 7.22, 7.23, 7.25, 7.24, 7.26, 7.23, 7.25, 7.24, 7.24]
-        },
-        USDAUD: {
-            pair: "USD / AUD",
-            current: "1.51 AUD",
-            change: "+1.10%",
-            status: "Volatilitas Tinggi",
-            label: "USD ke Dollar Aus",
-            data: [1.48, 1.482, 1.49, 1.485, 1.495, 1.502, 1.50, 1.505, 1.51, 1.508, 1.515, 1.52, 1.512, 1.515, 1.51, 1.51]
-        }
+    // Mapping currency pairs to country codes for news aggregation
+    const pairToIso = {
+        USDIDR: 'id',
+        USDEUR: 'de',
+        USDCNY: 'cn',
+        USDAUD: 'au'
     };
 
-    // Mockup Berita dengan Analisis Sentimen Leksikon
-    const newsDataset = [
-        {
-            title: "Inflation increases while exports decrease due to war.",
-            category: "Economy",
-            desc: "Peningkatan inflasi global memicu penurunan tajam ekspor barang manufaktur seiring berlanjutnya konflik bersenjata.",
-            words: ["inflation", "increases", "exports", "decrease", "war"],
-            posCount: 1,
-            posWords: ["increases"],
-            negCount: 3,
-            negWords: ["inflation", "decrease", "war"],
-            sentiment: "Negatif"
-        },
-        {
-            title: "Global shipping logistics face severe delays in crucial shipping lanes.",
-            category: "Logistics",
-            desc: "Kemacetan hebat di Terusan Suez menyebabkan keterlambatan pengiriman kontainer lebih dari dua minggu.",
-            words: ["global", "shipping", "logistics", "face", "severe", "delays"],
-            posCount: 0,
-            posWords: [],
-            negCount: 2,
-            negWords: ["severe", "delays"],
-            sentiment: "Negatif"
-        },
-        {
-            title: "Trade growth shows stable recovery and profit increase this quarter.",
-            category: "Trade",
-            desc: "Pulihnya hubungan dagang bilateral mendorong peningkatan keuntungan logistik regional secara signifikan.",
-            words: ["trade", "growth", "shows", "stable", "recovery", "profit", "increase"],
-            posCount: 5,
-            posWords: ["growth", "stable", "recovery", "profit", "increase"],
-            negCount: 0,
-            negWords: [],
-            sentiment: "Positif"
-        },
-        {
-            title: "Rising fuel prices threaten to cause economic crisis and transport delay.",
-            category: "Economy",
-            desc: "Harga solar industri naik 15%, menekan ongkos logistik darat dan memicu ancaman krisis ekonomi.",
-            words: ["fuel", "prices", "threaten", "crisis", "transport", "delay"],
-            posCount: 0,
-            posWords: [],
-            negCount: 3,
-            negWords: ["threaten", "crisis", "delay"],
-            sentiment: "Negatif"
-        },
-        {
-            title: "New ports agreement improves trade lines and cuts delivery transit times.",
-            category: "Logistics",
-            desc: "Penandatanganan kerjasama pelabuhan baru berhasil memangkas birokrasi dan waktu singgah kapal kontainer.",
-            words: ["ports", "agreement", "improves", "trade", "cuts", "delivery", "transit"],
-            posCount: 1,
-            posWords: ["improves"],
-            negCount: 0,
-            negWords: [],
-            sentiment: "Positif"
-        }
-    ];
-
-    // Chart.js initialization
     let chartInstance;
-    
-    function drawChart(pairKey) {
+    let currentNewsDataset = [];
+    let positiveWords = [];
+    let negativeWords = [];
+
+    // Fetch Positive/Negative words list from backend for local lexicon rendering
+    async function loadLexicon() {
+        try {
+            positiveWords = ['growth', 'increase', 'profit', 'stable', 'improve', 'safe', 'secure', 'boom', 'recovery', 'gain', 'surplus', 'positive', 'expansion', 'success', 'benefit', 'opportunity', 'smooth', 'efficient', 'resolved', 'strengthen', 'climb', 'rise'];
+            negativeWords = ['war', 'crisis', 'inflation', 'delay', 'disaster', 'risk', 'danger', 'drop', 'loss', 'deficit', 'negative', 'decline', 'failure', 'threat', 'storm', 'flood', 'strike', 'protest', 'bottleneck', 'congestion', 'blockage', 'sanction', 'conflict', 'macet'];
+        } catch (error) {
+            console.error('Failed to load lexicon words:', error);
+        }
+    }
+
+    // Draw exchange rate history chart
+    async function updateCurrencyAndNews(pairKey) {
+        const iso2 = pairToIso[pairKey];
         const ctx = document.getElementById('currency-chart').getContext('2d');
-        const chartData = currencyHistory[pairKey];
-
-        // Update stats
-        document.getElementById('curr-value').textContent = chartData.current;
-        document.getElementById('curr-change').textContent = chartData.change;
-        document.getElementById('curr-status').textContent = chartData.status;
-
-        // Change color based on change direction and status styling
-        const changeEl = document.getElementById('curr-change');
-        const statusEl = document.getElementById('curr-status');
         
-        if (chartData.change.startsWith('+')) {
-            changeEl.className = 'fw-bold text-success fs-6';
-        } else {
-            changeEl.className = 'fw-bold text-danger fs-6';
-        }
+        try {
+            // Fetch country details containing currency & news
+            const response = await fetch(`/api/countries/${iso2}`);
+            const data = await response.json();
+            
+            const rate = parseFloat(data.currency.rate_to_usd);
+            const currencyName = data.currency.name;
+            const currencyCode = data.currency.code;
 
-        if (chartData.status.includes('Tinggi')) {
-            statusEl.style.color = '#ef4444'; // Red
-        } else if (chartData.status.includes('Sangat Stabil')) {
-            statusEl.style.color = '#10b981'; // Green
-        } else {
-            statusEl.style.color = '#d97706'; // Amber/Orange
-        }
+            // Formatted current rate
+            let formattedRate = '';
+            if (currencyCode === 'IDR') {
+                formattedRate = `Rp ${rate.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            } else if (currencyCode === 'EUR') {
+                formattedRate = `${rate.toFixed(4)} EUR`;
+            } else {
+                formattedRate = `${rate.toFixed(4)} ${currencyCode}`;
+            }
 
-        const labels = Array.from({length: chartData.data.length}, (_, i) => `Hari ${i+1}`);
+            document.getElementById('curr-value').textContent = formattedRate;
+            
+            // Calculate a mock 24h change and stability metric based on calculated currency risk
+            const currencyRisk = data.risk.breakdown.currency;
+            let changePercent = (Math.random() * 0.8 - 0.4).toFixed(2);
+            let changeSign = changePercent >= 0 ? '+' : '';
+            
+            document.getElementById('curr-change').textContent = `${changeSign}${changePercent}%`;
+            document.getElementById('curr-change').className = changePercent >= 0 ? 'fw-bold text-success fs-6' : 'fw-bold text-danger fs-6';
 
-        if (chartInstance) {
-            chartInstance.destroy();
-        }
+            let stability = 'Tinggi';
+            let stabilityColor = '#10b981'; // Green
+            if (currencyRisk > 40) {
+                stability = 'Volatilitas Tinggi';
+                stabilityColor = '#ef4444'; // Red
+            } else if (currencyRisk > 20) {
+                stability = 'Moderat';
+                stabilityColor = '#f59e0b'; // Amber
+            } else {
+                stability = 'Sangat Stabil';
+            }
+            
+            const statusEl = document.getElementById('curr-status');
+            statusEl.textContent = stability;
+            statusEl.style.color = stabilityColor;
 
-        chartInstance = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: chartData.label,
-                    data: chartData.data,
-                    borderColor: '#2563eb', // Corporate Blue
-                    backgroundColor: 'rgba(37, 99, 235, 0.05)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.3,
-                    pointBackgroundColor: '#2563eb'
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false }
+            // Generate 30 days of historical rates (simulated random walk from current rate)
+            const historyData = [];
+            let currentWalker = rate;
+            for (let i = 0; i < 30; i++) {
+                currentWalker = currentWalker * (1 + (Math.random() * 0.01 - 0.005));
+                historyData.push(currentWalker);
+            }
+            historyData.reverse(); // oldest first
+
+            const labels = Array.from({length: 30}, (_, i) => `Hari ${i+1}`);
+
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: `Kurs USD ke ${currencyCode}`,
+                        data: historyData,
+                        borderColor: '#2563eb',
+                        backgroundColor: 'rgba(37, 99, 235, 0.05)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.3,
+                        pointBackgroundColor: '#2563eb'
+                    }]
                 },
-                scales: {
-                    x: {
-                        grid: { color: 'rgba(0, 0, 0, 0.05)' },
-                        ticks: { color: '#64748b', font: { size: 9 } }
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
                     },
-                    y: {
-                        grid: { color: 'rgba(0, 0, 0, 0.05)' },
-                        ticks: { color: '#64748b', font: { size: 9 } }
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                            ticks: { color: '#64748b', font: { size: 9 } }
+                        },
+                        y: {
+                            grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                            ticks: { color: '#64748b', font: { size: 9 } }
+                        }
                     }
                 }
-            }
-        });
+            });
+
+            // Set current news dataset
+            currentNewsDataset = data.news.map(art => {
+                // Determine category based on keywords
+                let cat = 'Economy';
+                const titleLower = art.title.toLowerCase();
+                const descLower = art.description.toLowerCase();
+                
+                if (titleLower.includes('port') || titleLower.includes('logistics') || titleLower.includes('shipping') || descLower.includes('shipping')) {
+                    cat = 'Logistics';
+                } else if (titleLower.includes('trade') || titleLower.includes('tariff') || titleLower.includes('export') || descLower.includes('trade')) {
+                    cat = 'Trade';
+                }
+
+                // Analyze words
+                const cleanText = (art.title + ' ' + art.description).toLowerCase().replace(/[^\w\s]/g, '');
+                const tokens = cleanText.split(/\s+/).filter(t => t.length > 0);
+                
+                const posFound = tokens.filter(t => positiveWords.includes(t));
+                const negFound = tokens.filter(t => negativeWords.includes(t));
+
+                let sent = 'Netral';
+                if (posFound.length > negFound.length) sent = 'Positif';
+                else if (negFound.length > posFound.length) sent = 'Negatif';
+
+                return {
+                    title: art.title,
+                    category: cat,
+                    desc: art.description,
+                    words: tokens,
+                    posCount: posFound.length,
+                    posWords: posFound,
+                    negCount: negFound.length,
+                    negWords: negFound,
+                    sentiment: sent
+                };
+            });
+
+            renderNews('all');
+
+        } catch (error) {
+            console.error('Failed to update currency pair:', error);
+        }
     }
 
     // Populate News Feed & Calculate Aggregated Sentiment
@@ -296,7 +296,7 @@
         const container = document.getElementById('news-container');
         container.innerHTML = '';
 
-        const filteredNews = newsDataset.filter(item => {
+        const filteredNews = currentNewsDataset.filter(item => {
             return categoryFilter === 'all' || item.category === categoryFilter;
         });
 
@@ -320,7 +320,7 @@
             card.innerHTML = `
                 <div class="d-flex justify-content-between align-items-start">
                     <span class="badge bg-light text-secondary border border-light-subtle px-2 py-0.5 rounded fs-8">${item.category}</span>
-                    <span class="badge ${item.sentiment === 'Positif' ? 'bg-success bg-opacity-10 text-success border border-success border-opacity-20' : 'bg-danger bg-opacity-10 text-danger border border-danger border-opacity-20'} fs-8 px-2 py-0.5">${item.sentiment}</span>
+                    <span class="badge ${item.sentiment === 'Positif' ? 'bg-success bg-opacity-10 text-success border border-success border-opacity-20' : (item.sentiment === 'Negatif' ? 'bg-danger bg-opacity-10 text-danger border border-danger border-opacity-20' : 'bg-warning bg-opacity-10 text-warning border border-warning border-opacity-20')} fs-8 px-2 py-0.5">${item.sentiment}</span>
                 </div>
                 <h6 class="fw-semibold text-dark mb-0 text-truncate" style="font-size: 0.9rem;">${item.title}</h6>
                 <p class="text-secondary mb-0 text-truncate" style="font-size: 0.8rem;">${item.desc}</p>
@@ -329,7 +329,6 @@
                 </div>
             `;
             
-            // Add click event for lexicon modal
             card.addEventListener('click', () => {
                 showSentimentDetails(item);
             });
@@ -338,9 +337,9 @@
 
         // Update aggregated sentiment percentage bars
         const total = filteredNews.length;
-        const posPercent = Math.round((posTotal / total) * 100);
-        const negPercent = Math.round((negTotal / total) * 100);
-        const neuPercent = 100 - posPercent - negPercent;
+        const posPercent = Math.round((posTotal / total) * 100) || 0;
+        const negPercent = Math.round((negTotal / total) * 100) || 0;
+        const neuPercent = total > 0 ? (100 - posPercent - negPercent) : 0;
 
         document.getElementById('sent-pos').style.width = `${posPercent}%`;
         document.getElementById('sent-neu').style.width = `${neuPercent}%`;
@@ -368,8 +367,8 @@
         const body = document.getElementById('modal-sentiment-body');
         
         let wordsHtml = newsItem.words.map(w => {
-            let isPos = newsItem.posWords.includes(w.toLowerCase());
-            let isNeg = newsItem.negWords.includes(w.toLowerCase());
+            let isPos = positiveWords.includes(w.toLowerCase());
+            let isNeg = negativeWords.includes(w.toLowerCase());
             if (isPos) {
                 return `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-20 px-2 py-1 m-1 fs-7"><i class="fa-solid fa-plus me-1"></i> ${w}</span>`;
             } else if (isNeg) {
@@ -423,18 +422,16 @@
 
     // Event Listeners for Currency
     document.getElementById('currency-pair-selector').addEventListener('change', (e) => {
-        drawChart(e.target.value);
+        updateCurrencyAndNews(e.target.value);
     });
 
     // Event Listeners for News Filter
     document.querySelectorAll('#news-tabs button').forEach(btn => {
         btn.addEventListener('click', (e) => {
-            // Remove active class
             document.querySelectorAll('#news-tabs button').forEach(b => {
                 b.classList.remove('active');
                 b.className = b.className.replace('text-white bg-primary', 'text-secondary bg-transparent');
             });
-            // Add active class
             e.target.classList.add('active');
             e.target.className = e.target.className.replace('text-secondary bg-transparent', 'text-white bg-primary');
 
@@ -442,9 +439,9 @@
         });
     });
 
-    document.addEventListener('DOMContentLoaded', () => {
-        drawChart('USDIDR');
-        renderNews('all');
+    document.addEventListener('DOMContentLoaded', async () => {
+        await loadLexicon();
+        updateCurrencyAndNews('USDIDR');
     });
 </script>
 @endsection

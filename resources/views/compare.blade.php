@@ -144,128 +144,140 @@
 
 @section('scripts')
 <script>
-    // Mockup data similar to dashboard.blade.php
-    const compareData = {
-        id: {
-            flag: "🇮🇩",
-            name: "Indonesia",
-            gdp: "$1.37 Triliun",
-            gdpGrowth: "+5.05% (Pertumbuhan Kuat)",
-            inflation: 2.8,
-            currency: "IDR (Rupiah)",
-            rate: "1 USD = Rp 16,300.00",
-            population: "275.5 Juta",
-            temp: "31°C (Cerah)",
-            storm: "2%",
-            riskScore: 25,
-            riskBadge: "Low Risk",
-            riskClass: "risk-low"
-        },
-        de: {
-            flag: "🇩🇪",
-            name: "Jerman",
-            gdp: "$4.20 Triliun",
-            gdpGrowth: "+1.2% (Pertumbuhan Lambat)",
-            inflation: 2.1,
-            currency: "EUR (Euro)",
-            rate: "1 USD = 0.92 EUR (1 EUR = Rp 17,200)",
-            population: "83.2 Juta",
-            temp: "18°C (Berawan)",
-            storm: "5%",
-            riskScore: 22,
-            riskBadge: "Low Risk",
-            riskClass: "risk-low"
-        },
-        cn: {
-            flag: "🇨🇳",
-            name: "China",
-            gdp: "$17.7 Triliun",
-            gdpGrowth: "+4.8% (Kuat)",
-            inflation: 0.5,
-            currency: "CNY (Yuan)",
-            rate: "1 USD = 7.24 CNY (1 CNY = Rp 2,250)",
-            population: "1.41 Milyar",
-            temp: "28°C (Hujan)",
-            storm: "45%",
-            riskScore: 47,
-            riskBadge: "Medium Risk",
-            riskClass: "risk-medium"
-        },
-        au: {
-            flag: "🇦🇺",
-            name: "Australia",
-            gdp: "$1.62 Triliun",
-            gdpGrowth: "+1.9% (Normal)",
-            inflation: 3.6,
-            currency: "AUD (Dollar Aus)",
-            rate: "1 USD = 1.51 AUD (1 AUD = Rp 10,800)",
-            population: "26.2 Juta",
-            temp: "14°C (Badai Petir)",
-            storm: "80%",
-            riskScore: 68,
-            riskBadge: "High Risk",
-            riskClass: "risk-high"
+    const selectorA = document.getElementById('compare-a');
+    const selectorB = document.getElementById('compare-b');
+    let loadedCountries = [];
+
+    // Helper functions for formatting
+    function formatGDP(value) {
+        if (!value) return "N/A";
+        if (value >= 1e12) {
+            return "$" + (value / 1e12).toFixed(2) + " Triliun";
+        } else if (value >= 1e9) {
+            return "$" + (value / 1e9).toFixed(2) + " Milyar";
         }
-    };
+        return "$" + value.toLocaleString('id-ID');
+    }
 
-    function runComparison() {
-        const keyA = document.getElementById('compare-a').value;
-        const keyB = document.getElementById('compare-b').value;
-        const dataA = compareData[keyA];
-        const dataB = compareData[keyB];
+    function formatPopulation(value) {
+        if (!value) return "N/A";
+        if (value >= 1e9) {
+            return (value / 1e9).toFixed(2) + " Milyar";
+        } else if (value >= 1e6) {
+            return (value / 1e6).toFixed(2) + " Juta";
+        }
+        return value.toLocaleString('id-ID');
+    }
 
-        if (!dataA || !dataB) return;
+    // Load countries list
+    async function loadCountries() {
+        try {
+            const response = await fetch('/api/countries');
+            loadedCountries = await response.json();
+            
+            // Populate select A
+            selectorA.innerHTML = '';
+            // Populate select B
+            selectorB.innerHTML = '';
+            
+            loadedCountries.forEach(country => {
+                const optA = document.createElement('option');
+                optA.value = country.iso2;
+                optA.textContent = `${country.iso2.toUpperCase()} - ${country.name}`;
+                if (country.iso2 === 'de') optA.selected = true;
+                selectorA.appendChild(optA);
 
-        // Apply fading effect
+                const optB = document.createElement('option');
+                optB.value = country.iso2;
+                optB.textContent = `${country.iso2.toUpperCase()} - ${country.name}`;
+                if (country.iso2 === 'au') optB.selected = true;
+                selectorB.appendChild(optB);
+            });
+
+            runComparison();
+        } catch (error) {
+            console.error('Failed to load countries list:', error);
+        }
+    }
+
+    async function runComparison() {
+        const keyA = selectorA.value;
+        const keyB = selectorB.value;
+        
+        if (!keyA || !keyB) return;
+
+        // Apply fading / loading state
         document.querySelectorAll('.table-row-animate').forEach(el => {
-            el.style.opacity = 0;
-            el.style.transition = 'opacity 0.2s ease';
+            el.style.opacity = 0.5;
         });
 
-        setTimeout(() => {
-            // Update Country A Headers & Content
-            document.getElementById('header-country-a').textContent = `${dataA.flag} ${dataA.name}`;
-            document.getElementById('val-a-risk-score').textContent = dataA.riskScore;
+        try {
+            const [resA, resB] = await Promise.all([
+                fetch(`/api/countries/${keyA}`).then(r => r.json()),
+                fetch(`/api/countries/${keyB}`).then(r => r.json())
+            ]);
+
+            // Update Country A Content
+            document.getElementById('header-country-a').textContent = `${keyA.toUpperCase()} - ${resA.country.name}`;
+            document.getElementById('val-a-risk-score').textContent = resA.risk.score;
             
             const badgeA = document.getElementById('val-a-risk-badge');
-            badgeA.textContent = dataA.riskBadge;
-            badgeA.className = `badge ${dataA.riskClass} px-3 py-1 rounded-pill`;
+            badgeA.textContent = resA.risk.badge;
+            badgeA.className = `badge ${resA.risk.badgeClass} px-3 py-1 rounded-pill`;
 
-            document.getElementById('val-a-gdp').textContent = dataA.gdp;
-            document.getElementById('val-a-gdp-growth').textContent = dataA.gdpGrowth;
-            document.getElementById('val-a-inflation').textContent = `${dataA.inflation}%`;
-            document.getElementById('val-a-currency').textContent = dataA.currency;
-            document.getElementById('val-a-rate').textContent = dataA.rate;
-            document.getElementById('val-a-population').textContent = dataA.population;
-            document.getElementById('val-a-temp').textContent = dataA.temp;
-            document.getElementById('val-a-storm').textContent = `Risiko Badai: ${dataA.storm}`;
+            document.getElementById('val-a-gdp').textContent = formatGDP(resA.country.gdp);
+            
+            const gdpGrowthA = resA.country.gdp_growth || 0;
+            document.getElementById('val-a-gdp-growth').textContent = `${gdpGrowthA >= 0 ? '+' : ''}${gdpGrowthA}%`;
+            
+            const inflA = parseFloat(resA.country.inflation || 0);
+            document.getElementById('val-a-inflation').textContent = `${inflA}%`;
+            document.getElementById('val-a-currency').textContent = `${resA.currency.code} (${resA.currency.name})`;
+            
+            const rateStrA = resA.currency.rate_to_usd 
+                ? `1 USD = ${parseFloat(resA.currency.rate_to_usd).toLocaleString('id-ID')} ${resA.currency.code}` 
+                : '1 USD = N/A';
+            document.getElementById('val-a-rate').textContent = rateStrA;
+            document.getElementById('val-a-population').textContent = formatPopulation(resA.country.population);
+            document.getElementById('val-a-temp').textContent = `${resA.weather.temp}°C`;
+            document.getElementById('val-a-storm').textContent = `Risiko Badai: ${resA.weather.storm_risk}%`;
 
-            // Update Country B Headers & Content
-            document.getElementById('header-country-b').textContent = `${dataB.flag} ${dataB.name}`;
-            document.getElementById('val-b-risk-score').textContent = dataB.riskScore;
+            // Update Country B Content
+            document.getElementById('header-country-b').textContent = `${keyB.toUpperCase()} - ${resB.country.name}`;
+            document.getElementById('val-b-risk-score').textContent = resB.risk.score;
 
             const badgeB = document.getElementById('val-b-risk-badge');
-            badgeB.textContent = dataB.riskBadge;
-            badgeB.className = `badge ${dataB.riskClass} px-3 py-1 rounded-pill`;
+            badgeB.textContent = resB.risk.badge;
+            badgeB.className = `badge ${resB.risk.badgeClass} px-3 py-1 rounded-pill`;
 
-            document.getElementById('val-b-gdp').textContent = dataB.gdp;
-            document.getElementById('val-b-gdp-growth').textContent = dataB.gdpGrowth;
-            document.getElementById('val-b-inflation').textContent = `${dataB.inflation}%`;
-            document.getElementById('val-b-currency').textContent = dataB.currency;
-            document.getElementById('val-b-rate').textContent = dataB.rate;
-            document.getElementById('val-b-population').textContent = dataB.population;
-            document.getElementById('val-b-temp').textContent = dataB.temp;
-            document.getElementById('val-b-storm').textContent = `Risiko Badai: ${dataB.storm}`;
+            document.getElementById('val-b-gdp').textContent = formatGDP(resB.country.gdp);
+            
+            const gdpGrowthB = resB.country.gdp_growth || 0;
+            document.getElementById('val-b-gdp-growth').textContent = `${gdpGrowthB >= 0 ? '+' : ''}${gdpGrowthB}%`;
+            
+            const inflB = parseFloat(resB.country.inflation || 0);
+            document.getElementById('val-b-inflation').textContent = `${inflB}%`;
+            document.getElementById('val-b-currency').textContent = `${resB.currency.code} (${resB.currency.name})`;
+            
+            const rateStrB = resB.currency.rate_to_usd 
+                ? `1 USD = ${parseFloat(resB.currency.rate_to_usd).toLocaleString('id-ID')} ${resB.currency.code}` 
+                : '1 USD = N/A';
+            document.getElementById('val-b-rate').textContent = rateStrB;
+            document.getElementById('val-b-population').textContent = formatPopulation(resB.country.population);
+            document.getElementById('val-b-temp').textContent = `${resB.weather.temp}°C`;
+            document.getElementById('val-b-storm').textContent = `Risiko Badai: ${resB.weather.storm_risk}%`;
 
-            // Dynamic Styling / Highlighting of better values
-            // Inflation coloring (lower inflation is highlighted in green, higher in orange/red)
+            // Highlight better values (inflation closer to 2.0% is highlighted)
             const cellInfA = document.getElementById('cell-a-inflation');
             const cellInfB = document.getElementById('cell-b-inflation');
             
-            if (dataA.inflation < dataB.inflation) {
+            const devA = Math.abs(inflA - 2.0);
+            const devB = Math.abs(inflB - 2.0);
+            
+            if (devA < devB) {
                 cellInfA.className = 'table-success bg-success bg-opacity-10';
                 cellInfB.className = '';
-            } else if (dataB.inflation < dataA.inflation) {
+            } else if (devB < devA) {
                 cellInfB.className = 'table-success bg-success bg-opacity-10';
                 cellInfA.className = '';
             } else {
@@ -277,14 +289,16 @@
             document.querySelectorAll('.table-row-animate').forEach(el => {
                 el.style.opacity = 1;
             });
-        }, 200);
+        } catch (error) {
+            console.error('Failed to run comparison:', error);
+        }
     }
 
-    document.getElementById('compare-a').addEventListener('change', runComparison);
-    document.getElementById('compare-b').addEventListener('change', runComparison);
+    selectorA.addEventListener('change', runComparison);
+    selectorB.addEventListener('change', runComparison);
 
     document.addEventListener('DOMContentLoaded', () => {
-        runComparison();
+        loadCountries();
     });
 </script>
 @endsection

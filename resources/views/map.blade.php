@@ -139,96 +139,18 @@
 
 @section('scripts')
 <script>
-    // Mockup data pelabuhan global
-    const portsDataset = [
-        {
-            id: 1,
-            name: "Port of Tanjung Priok",
-            countryCode: "id",
-            countryName: "Indonesia",
-            lat: -6.1033,
-            lng: 106.8911,
-            congestion: "Rendah (2 jam delay)",
-            congestionColor: "text-success",
-            weather: "Cerah, 31°C",
-            wind: "8 km/h",
-            hazard: false,
-            hazardDesc: ""
-        },
-        {
-            id: 2,
-            name: "Port of Tanjung Perak",
-            countryCode: "id",
-            countryName: "Indonesia",
-            lat: -7.2023,
-            lng: 112.7247,
-            congestion: "Sedang (6 jam delay)",
-            congestionColor: "text-warning",
-            weather: "Cerah Berawan, 32°C",
-            wind: "11 km/h",
-            hazard: false,
-            hazardDesc: ""
-        },
-        {
-            id: 3,
-            name: "Port of Hamburg",
-            countryCode: "de",
-            countryName: "Jerman",
-            lat: 53.5458,
-            lng: 9.9658,
-            congestion: "Rendah (1 jam delay)",
-            congestionColor: "text-success",
-            weather: "Berawan, 18°C",
-            wind: "12 km/h",
-            hazard: false,
-            hazardDesc: ""
-        },
-        {
-            id: 4,
-            name: "Port of Shanghai",
-            countryCode: "cn",
-            countryName: "China",
-            lat: 30.6267,
-            lng: 122.0633,
-            congestion: "Sangat Tinggi (24 jam delay)",
-            congestionColor: "text-danger",
-            weather: "Hujan Sedang, 28°C",
-            wind: "24 km/h",
-            hazard: true,
-            hazardDesc: "Hujan Lebat & Angin Kencang (Risiko Hambatan Pengiriman)"
-        },
-        {
-            id: 5,
-            name: "Port of Sydney",
-            countryCode: "au",
-            countryName: "Australia",
-            lat: -33.8568,
-            lng: 151.2153,
-            congestion: "Tinggi (12 jam delay)",
-            congestionColor: "text-warning",
-            weather: "Badai Petir, 14°C",
-            wind: "45 km/h",
-            hazard: true,
-            hazardDesc: "Peringatan Badai Ekstrem (Operasional Pelabuhan Ditunda)"
-        }
-    ];
-
-    const countryCoordinates = {
-        all: { center: [15, 100], zoom: 3 },
-        id: { center: [-2.5489, 118.0149], zoom: 5 },
-        de: { center: [51.1657, 10.4515], zoom: 6 },
-        cn: { center: [35.8617, 104.1954], zoom: 4 },
-        au: { center: [-25.2744, 133.7751], zoom: 4 }
-    };
-
+    const selector = document.getElementById('map-country-selector');
     let map;
     let markerLayerGroup;
+    let loadedCountries = [];
+    let currentPorts = [];
+    let activeWeather = null;
 
     // Initialize Leaflet Map
     function initMap() {
-        map = L.map('map').setView(countryCoordinates.all.center, countryCoordinates.all.zoom);
+        // Center on Southeast Asia / Equator initially
+        map = L.map('map').setView([-2.5, 118], 4);
         
-        // Light theme map layer from CartoDB Voyager
         L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
             subdomains: 'abcd',
@@ -236,21 +158,69 @@
         }).addTo(map);
 
         markerLayerGroup = L.layerGroup().addTo(map);
-        renderPortsAndHazards();
+    }
+
+    // Load countries list
+    async function loadCountries() {
+        try {
+            const response = await fetch('/api/countries');
+            loadedCountries = await response.json();
+            
+            selector.innerHTML = '<option value="">-- Pilih Negara --</option>';
+            loadedCountries.forEach(country => {
+                const option = document.createElement('option');
+                option.value = country.iso2;
+                option.dataset.lat = country.latitude;
+                option.dataset.lng = country.longitude;
+                option.textContent = `${country.iso2.toUpperCase()} - ${country.name}`;
+                selector.appendChild(option);
+            });
+
+            // Default load Indonesia (id)
+            selector.value = 'id';
+            triggerCountryChange('id');
+        } catch (error) {
+            console.error('Failed to load countries:', error);
+        }
+    }
+
+    // Trigger country change
+    async function triggerCountryChange(iso2) {
+        if (!iso2) return;
+        
+        const selectedOption = selector.options[selector.selectedIndex];
+        const lat = parseFloat(selectedOption.dataset.lat);
+        const lng = parseFloat(selectedOption.dataset.lng);
+        
+        if (!isNaN(lat) && !isNaN(lng)) {
+            map.flyTo([lat, lng], 5);
+        }
+
+        try {
+            // 1. Fetch weather of country to assess global hazard warning
+            const weatherResponse = await fetch(`/api/countries/${iso2}`);
+            const countryData = await weatherResponse.json();
+            activeWeather = countryData.weather;
+
+            // 2. Fetch ports of selected country
+            const portsResponse = await fetch(`/api/ports?country_code=${iso2}`);
+            currentPorts = await portsResponse.json();
+
+            renderPortsAndHazards();
+        } catch (error) {
+            console.error('Failed to load country ports or weather:', error);
+        }
     }
 
     // Render markers based on filter settings
     function renderPortsAndHazards() {
         markerLayerGroup.clearLayers();
         const searchVal = document.getElementById('port-search').value.toLowerCase();
-        const countryVal = document.getElementById('map-country-selector').value;
         const showPorts = document.getElementById('toggle-ports').checked;
         const showHazards = document.getElementById('toggle-hazards').checked;
 
-        const filteredPorts = portsDataset.filter(port => {
-            const matchesSearch = port.name.toLowerCase().includes(searchVal);
-            const matchesCountry = (countryVal === 'all' || port.countryCode === countryVal);
-            return matchesSearch && matchesCountry;
+        const filteredPorts = currentPorts.filter(port => {
+            return port.name.toLowerCase().includes(searchVal);
         });
 
         // Populate left sidebar list
@@ -262,24 +232,29 @@
         }
 
         filteredPorts.forEach(port => {
+            const hasHazard = activeWeather && (activeWeather.storm_risk > 40 || activeWeather.wind > 25);
+            const hazardDesc = hasHazard 
+                ? `Badai / Angin Kencang (${activeWeather.wind} km/h, Risiko Badai ${activeWeather.storm_risk}%)` 
+                : '';
+
             // Add list item
             const item = document.createElement('div');
             item.className = 'port-list-item p-3 d-flex justify-content-between align-items-center';
             item.innerHTML = `
                 <div>
                     <span class="fw-semibold text-white d-block" style="font-size: 0.9rem;">${port.name}</span>
-                    <small class="text-secondary"><i class="fa-solid fa-location-dot me-1"></i> ${port.countryName}</small>
+                    <small class="text-secondary"><i class="fa-solid fa-barcode me-1"></i> ${port.code || 'N/A'}</small>
                 </div>
-                ${port.hazard ? '<span class="badge bg-danger rounded-circle p-1"><i class="fa-solid fa-triangle-exclamation" style="font-size: 0.65rem;"></i></span>' : '<i class="fa-solid fa-chevron-right text-secondary fs-7"></i>'}
+                ${hasHazard ? '<span class="badge bg-danger rounded-circle p-1"><i class="fa-solid fa-triangle-exclamation" style="font-size: 0.65rem;"></i></span>' : '<i class="fa-solid fa-chevron-right text-secondary fs-7"></i>'}
             `;
             item.addEventListener('click', () => {
-                map.flyTo([port.lat, port.lng], 9);
-                openPortPopup(port);
+                map.flyTo([port.latitude, port.longitude], 8);
+                openPortPopup(port, hasHazard, hazardDesc);
             });
             listContainer.appendChild(item);
 
             // Add marker to map
-            if (port.hazard && showHazards) {
+            if (hasHazard && showHazards) {
                 // Render hazard marker
                 const hazardIcon = L.divIcon({
                     className: 'hazard-marker',
@@ -287,9 +262,9 @@
                     iconSize: [36, 36]
                 });
 
-                const m = L.marker([port.lat, port.lng], { icon: hazardIcon }).addTo(markerLayerGroup);
-                m.bindPopup(getPopupContent(port));
-            } else if (!port.hazard && showPorts) {
+                const m = L.marker([port.latitude, port.longitude], { icon: hazardIcon }).addTo(markerLayerGroup);
+                m.bindPopup(getPopupContent(port, true, hazardDesc));
+            } else if (showPorts) {
                 // Render normal port marker
                 const portIcon = L.divIcon({
                     className: 'port-marker',
@@ -297,26 +272,30 @@
                     iconSize: [30, 30]
                 });
 
-                const m = L.marker([port.lat, port.lng], { icon: portIcon }).addTo(markerLayerGroup);
-                m.bindPopup(getPopupContent(port));
+                const m = L.marker([port.latitude, port.longitude], { icon: portIcon }).addTo(markerLayerGroup);
+                m.bindPopup(getPopupContent(port, false, ''));
             }
         });
     }
 
-    function getPopupContent(port) {
+    function getPopupContent(port, hasHazard, hazardDesc) {
+        const weatherStr = activeWeather 
+            ? `${activeWeather.temp}°C, Curah Hujan ${activeWeather.rain} mm` 
+            : 'N/A';
+        const windStr = activeWeather ? `${activeWeather.wind} km/h` : 'N/A';
+
         return `
             <div style="width: 220px; font-family: 'Inter', sans-serif;">
                 <h6 class="fw-bold text-white border-bottom border-secondary pb-2 mb-2 d-flex align-items-center gap-2">
                     <i class="fa-solid fa-anchor text-primary"></i> ${port.name}
                 </h6>
                 <div class="d-flex flex-column gap-1 text-secondary" style="font-size: 0.8rem;">
-                    <div><span class="text-white">Negara:</span> ${port.countryName}</div>
-                    <div><span class="text-white">Kemacetan:</span> <span class="${port.congestionColor} fw-semibold">${port.congestion}</span></div>
-                    <div><span class="text-white">Cuaca:</span> ${port.weather}</div>
-                    <div><span class="text-white">Angin:</span> ${port.wind}</div>
-                    ${port.hazard ? `
+                    <div><span class="text-white">LOCODE:</span> ${port.code || 'N/A'}</div>
+                    <div><span class="text-white">Cuaca Pelabuhan:</span> ${weatherStr}</div>
+                    <div><span class="text-white">Kecepatan Angin:</span> ${windStr}</div>
+                    ${hasHazard ? `
                         <div class="mt-2 p-2 rounded bg-danger bg-opacity-25 border border-danger border-opacity-50 text-danger" style="font-size: 0.75rem;">
-                            <i class="fa-solid fa-triangle-exclamation me-1"></i> <strong>Kerawanan:</strong> ${port.hazardDesc}
+                            <i class="fa-solid fa-triangle-exclamation me-1"></i> <strong>Kerawanan:</strong> ${hazardDesc}
                         </div>
                     ` : ''}
                 </div>
@@ -324,11 +303,10 @@
         `;
     }
 
-    function openPortPopup(port) {
-        // Open popup dynamically on fly-to coordinates
+    function openPortPopup(port, hasHazard, hazardDesc) {
         const pop = L.popup({ closeButton: true })
-            .setLatLng([port.lat, port.lng])
-            .setContent(getPopupContent(port))
+            .setLatLng([port.latitude, port.longitude])
+            .setContent(getPopupContent(port, hasHazard, hazardDesc))
             .openOn(map);
     }
 
@@ -337,17 +315,13 @@
     document.getElementById('toggle-ports').addEventListener('change', renderPortsAndHazards);
     document.getElementById('toggle-hazards').addEventListener('change', renderPortsAndHazards);
     
-    document.getElementById('map-country-selector').addEventListener('change', (e) => {
-        const countryVal = e.target.value;
-        const coords = countryCoordinates[countryVal];
-        if (coords) {
-            map.flyTo(coords.center, coords.zoom);
-        }
-        renderPortsAndHazards();
+    selector.addEventListener('change', (e) => {
+        triggerCountryChange(e.target.value);
     });
 
     document.addEventListener('DOMContentLoaded', () => {
         initMap();
+        loadCountries();
     });
 </script>
 @endsection
